@@ -24,7 +24,102 @@ https://go.dev/doc/go1.19 Go 1.19 的发布说明文档
 
 ## go 1.18
 
+### 1、泛型
+
+**泛型是Go诞生以来最复杂、最难读和理解的语法特性**
+
+### 2、**模糊测试Fuzzing**
+
+
+
+### 3、**Workspaces**
+
+解决go mod遗留下来的**本地多模块开发依赖问题**
+
+在没有 go1.18 之前，只能使用 replace，如下：
+
+```go
+replace (
+ common =>  "xx/xx/common"
+)
+```
+
+当前我们的项目目录如下:
+
+```go
+.
+├── common // 子模块
+│   ├── go.mod
+│   └── util.go
+└── hello // 子模块
+    ├── go.mod
+    └── main.go
+```
+
+进入项目目录, 我们使用`go work init ./hello `来初始化一个新的工作区, 同时加入需要的的子模块
+
+```go
+.
+├── common // 子模块
+│   ├── go.mod
+│   └── util.go
+├── go.work //工作区
+└── hello // 子模块
+    ├── go.mod
+    └── main.go
+
+```
+
+把 common项目移动到 workspace 目录下，然后执行：
+
+```go
+go work use ./common
+```
+
+work工作区:
+
+```go
+go 1.19
+
+use (
+	./common
+	./hello
+)
+```
+
+main函数代码：执行命令：
+
+```go
+package main
+
+import (
+	"example.com/common"
+	"fmt"
+)
+
+func main() {
+	common.PrintUtil()
+	fmt.Printf("this is hello")
+}
+
+```
+
+执行命令：
+
+```go
+thie is common
+this is hello%  
+```
+
+参考：
+
 https://go.dev/doc/go1.18 Go 1.18 的发布说明文档
+
+https://tonybai.com/2022/04/20/some-changes-in-go-1-18/ go1.18变化
+
+https://go.dev/doc/tutorial/workspaces 
+
+https://go.googlesource.com/proposal/+/master/design/45713-workspace.md
 
 ## go 1.17
 
@@ -605,6 +700,8 @@ https://go-review.googlesource.com/q/status:open+-is:wip Go 项目的代码 revi
 https://www.bilibili.com/video/BV1iS4y1z7V5/?spm_id_from=333.337.search-card.all.click&vd_source=39d622d5b0f294cef4556e52ef149a30 从汇编角度理解函数调用过程
 
 https://cloud.tencent.com/developer/article/2126557 深入分析go1.17函数调用栈参数传递
+
+https://blog.csdn.net/weixin_52690231/article/details/125305807 调用约定修改
 
 ## go 1.16
 
