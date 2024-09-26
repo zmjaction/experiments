@@ -40,7 +40,114 @@ Fuzzing中文含义是[模糊测试](https://zhida.zhihu.com/search?content_id=1
 
 - 模糊测试可以生成随机测试数据，找出单元测试覆盖不到的场景，进而发现程序的潜在bug和安全漏洞。
 
+#### 2.2 Fuzzing 使用
 
+Go Fuzzing模糊测试函数的语法如下所示：
+
+- 模糊测试函数定义在`xxx_test.go`文件里，这点和Go已有的单元测试(unit test)和性能测试(benchmark test)一样。
+- 函数名以`Fuzz`开头，参数是`* testing.F`类型，`testing.F`类型有2个重要方法`Add`和`Fuzz`。
+- `Add`方法是用于添加种子语料(seed corpus)数据，Fuzzing底层可以根据种子语料数据自动生成随机测试数据。
+- `Fuzz`方法接收一个函数类型的变量作为参数，该函数类型的第一个参数必须是`*testing.T`类型，其余的参数类型和`Add`方法里传入的实参类型保持一致
+
+<img src="https://imghosting-1257040086.cos.ap-nanjing.myqcloud.com/img/image-20240926234858885.png" alt="image-20240926234858885" style="zoom:50%;" />
+
+我们声明如下翻转函数：
+
+```go
+func Reverse(s string) string {
+    b := []byte(s)
+    for i, j := 0, len(b)-1; i < len(b)/2; i, j = i+1, j-1 {
+        b[i], b[j] = b[j], b[i]
+    }
+    return string(b)
+}
+func main() {
+	input := "The quick brown fox jumped over the lazy dog"
+	rev := utils.Reverse(input)
+	doubleRev := utils.Reverse(rev)
+	fmt.Printf("original: %q\n", input)
+	fmt.Printf("reversed: %q\n", rev)
+	fmt.Printf("reversed again: %q\n", doubleRev)
+}
+输出：
+$ original: "The quick brown fox jumped over the lazy dog"
+$ reversed: "god yzal eht revo depmuj xof nworb kciuq ehT"
+$ reversed again: "The quick brown fox jumped over the lazy dog"
+
+```
+
+添加单元测试并验证：
+
+```go
+func TestReverse(t *testing.T) {
+	testcases := []struct {
+		in, want string
+	}{
+		{"Hello, world", "dlrow ,olleH"},
+		{" ", " "},
+		{"!12345", "54321!"},
+	}
+	for _, tc := range testcases {
+		rev := Reverse(tc.in)
+		if rev != tc.want {
+			t.Errorf("Reverse: %q, want %q", rev, tc.want)
+		}
+	}
+}
+输出：
+--- PASS: TestReverse (0.00s)
+PASS
+```
+
+将增加模糊测试：
+
+```go
+func FuzzReverse(f *testing.F) {
+    testcases := []string{"Hello, world", " ", "!12345"}
+    for _, tc := range testcases {
+        f.Add(tc)  // Use f.Add to provide a seed corpus
+    }
+    f.Fuzz(func(t *testing.T, orig string) {
+        rev := Reverse(orig)
+        doubleRev := Reverse(rev)
+        if orig != doubleRev {
+            t.Errorf("Before: %q, after: %q", orig, doubleRev)
+        }
+        if utf8.ValidString(orig) && !utf8.ValidString(rev) {
+            t.Errorf("Reverse produced invalid UTF-8 string %q", rev)
+        }
+    })
+}
+# 执行
+go test -v -fuzz=FuzzReverse
+```
+
+![image-20240927000833414](https://imghosting-1257040086.cos.ap-nanjing.myqcloud.com/img/image-20240927000833414.png)
+
+这个例子里，随机生成了一个字符串，这是由2个字节组成的一个UTF-8字符串，按照`Reverse`函数进行反转后，得到了一个非UTF-8的字符串
+
+所以我们之前实现的按照字节进行字符串反转的函数`Reverse`是有bug的，该函数对于ASCII码里的字符组成的字符串是可以正确反转的，但是对于非ASCII码里的字符，如果简单按照字节进行反转，得到的可能是一个非法的字符串。
+
+修改后的反转函数：
+
+```go
+func Reverse(s string) (string, error) {
+    if !utf8.ValidString(s) { // 价差字符串是否有效的UTF-8编码字符串，如果不是则返回空字符串
+        return s, errors.New("input is not valid UTF-8")
+    }
+    r := []rune(s) // 将字符串转换为rune切片，确保可以处理多字节字符 如中文
+    for i, j := 0, len(r)-1; i < len(r)/2; i, j = i+1, j-1 {
+        r[i], r[j] = r[j], r[i]
+    }
+    return string(r), nil
+}
+```
+
+![image-20240927000415512](https://imghosting-1257040086.cos.ap-nanjing.myqcloud.com/img/image-20240927000415512.png)
+
+https://tonybai.com/2021/12/01/first-class-fuzzing-in-go-1-18 
+
+https://pkg.go.dev/testing@master#hdr-Fuzzing
 
 ### 3、**Workspaces**
 
