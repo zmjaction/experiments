@@ -30,6 +30,16 @@ https://go.dev/doc/go1.19 Go 1.19 的发布说明文档
 
 ### 2、**模糊测试Fuzzing**
 
+#### 2.1 Fuzzing介绍及特点：
+
+Fuzzing中文含义是[模糊测试](https://zhida.zhihu.com/search?content_id=197551581&content_type=Article&match_order=2&q=模糊测试&zhida_source=entity)，是一种自动化测试技术，可以随机生成[测试数据](https://zhida.zhihu.com/search?content_id=197551581&content_type=Article&match_order=1&q=测试数据&zhida_source=entity)集，然后调用要测试的功能代码来检查功能是否符合预期。
+
+-  模糊测试(fuzz test)是对[单元测试](https://zhida.zhihu.com/search?content_id=197551581&content_type=Article&match_order=1&q=单元测试&zhida_source=entity)(unit test)的补充，并不是要替代单元测试。
+
+- 单元测试是检查指定的输入得到的结果是否和预期的输出结果一致，测试数据集比较有限。
+
+- 模糊测试可以生成随机测试数据，找出单元测试覆盖不到的场景，进而发现程序的潜在bug和安全漏洞。
+
 
 
 ### 3、**Workspaces**
