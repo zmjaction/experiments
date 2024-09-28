@@ -1,5 +1,7 @@
 # Go版本
 
+Go并不是一成不变的编程语言。最初的Go1.0发布以来，Go语言习惯的模式已经发生了重大的变化
+
 ## go 1.23
 
 https://go.dev/blog/go1.23
@@ -24,9 +26,182 @@ https://go.dev/doc/go1.19 Go 1.19 的发布说明文档
 
 ## go 1.18
 
-### 1、泛型
+### 1、泛型引入
 
 **泛型是Go诞生以来最复杂、最难读和理解的语法特性**
+
+假设我们有个计算两数之和的函数：
+
+```go
+func Add(a int, b int) int {
+    return a + b
+}
+```
+
+这个函数很简单，但是它有个问题——无法计算int类型之外的和。如果我们想计算浮点或者字符串的和该怎么办？解决办法之一就是像下面这样为不同类型定义不同的函数
+
+```go
+func AddFloat32(a float32, b float32) float32 {
+    return a + b
+}
+
+func AddString(a string, b string) string {
+    return a + b
+}
+```
+
+可是除此之外还有没有更好的方法？答案是有的，我们可以来回顾下函数的 **形参(parameter)** 和 **实参(argument)** 这一基本概念：
+
+```go
+func Add(a int, b int) int {  
+    // 变量a,b是函数的形式参数   "a int, b int" 这一串被称为形参列表
+    return a + b
+}
+
+Add(100,200) // 调用函数时，传入的100和200是实际参数
+```
+
+我们知道，函数的 **形参(parameter)** 只是类似占位符的东西并没有具体的值，只有我们调用函数传入**实参(argument)** 之后才有具体的值。
+
+那么，如果我们将 **形参 实参** 这个概念推广一下，给变量的类型也引入和类似形参实参的概念的话，问题就迎刃而解：在这里我们将其称之为 **类型形参(type parameter)** 和 **类型实参(type argument)**，如下：
+
+```go
+// 假设 T 是类型形参，在定义函数时它的类型是不确定的，类似占位符
+func Add(a T, b T) T {  
+    return a + b
+}
+```
+
+在上面这段伪代码中， T 被称为 **类型形参(type parameter)**， 它不是具体的类型，在定义函数时类型并不确定。因为 T 的类型并不确定，所以我们需要像函数的形参那样，在调用函数的时候再传入具体的类型。这样我们不就能一个函数同时支持多个不同的类型了吗？在这里被传入的具体类型被称为 **类型实参(type argument)**:
+
+下面一段伪代码展示了调用函数时传入类型实参的方式：
+
+```go
+// [T=int]中的 int 是类型实参，代表着函数Add()定义中的类型形参 T 全都被 int 替换
+Add[T=int](100, 200)  
+// 传入类型实参int后，Add()函数的定义可近似看成下面这样：
+func Add( a int, b int) int {
+    return a + b
+}
+
+// 另一个例子：当我们想要计算两个字符串之和的时候，就传入string类型实参
+Add[T=string]("Hello", "World") 
+// 类型实参string传入后，Add()函数的定义可近似视为如下
+func Add( a string, b string) string {
+    return a + b
+}
+```
+
+通过引入 **类型形参** 和 **类型实参** 这两个概念，我们让一个函数获得了处理多种不同类型数据的能力，这种编程方式被称为 **泛型编程**。
+
+### 2、类型形参、类型实参
+
+观察下面这个简单的例子：
+
+```go
+type IntSlice []int
+
+var a IntSlice = []int{1, 2, 3} // 正确
+var b IntSlice = []float32{1.0, 2.0, 3.0} // ✗ 错误，因为IntSlice的底层类型是[]int，浮点类型的切片无法赋值
+```
+
+这里定义了一个新的类型 `IntSlice` ，它的底层类型是 `[]int` ，理所当然只有int类型的切片能赋值给 `IntSlice` 类型的变量。
+
+接下来如果我们想要定义一个可以容纳 `float32` 或 `string` 等其他类型的切片的话该怎么办？很简单，给每种类型都定义个新类型：
+
+```go
+type StringSlice []string
+type Float32Slie []float32
+type Float64Slice []float64
+```
+
+但是这样做的问题显而易见，它们结构都是一样的只是成员类型不同就需要重新定义这么多新类型。那么有没有一个办法能只定义一个类型就能代表上面这所有的类型呢？答案是可以的，这时候就需要用到泛型了：
+
+```go
+type Slice[T int|float32|float64 ] []T
+```
+
+不同于一般的类型定义，这里类型名称 `Slice` 后带了中括号，对各个部分做一个解说就是：
+
+- `T` 就是上面介绍过的**类型形参(Type parameter)**，在定义Slice类型的时候 T 代表的具体类型并不确定，类似一个占位符
+- `int|float32|float64` 这部分被称为**类型约束(Type constraint)**，中间的 `|` 的意思是告诉编译器，类型形参 T 只可以接收 int 或 float32 或 float64 这三种类型的实参
+- 中括号里的 `T int|float32|float64` 这一整串因为定义了所有的类型形参(在这个例子里只有一个类型形参T），所以我们称其为 **类型形参列表(type parameter list)**
+- 这里新定义的类型名称叫 `Slice[T]`
+
+这种类型定义的方式中带了类型形参，很明显和普通的类型定义非常不一样，所以我们将这种
+
+> 类型定义中带 **类型形参** **的类型，称之为** 泛型类型(Generic type)**
+
+泛型类型不能直接拿来使用，必须传入**类型实参(Type argument)** 将其确定为具体的类型之后才可使用。而传入类型实参确定具体类型的操作被称为 **实例化(Instantiations)** ：
+
+```go
+// 这里传入了类型实参int，泛型类型Slice[T]被实例化为具体的类型 Slice[int]
+var a Slice[int] = []int{1, 2, 3}  
+fmt.Printf("Type Name: %T",a)  //输出：Type Name: Slice[int]
+
+// 传入类型实参float32, 将泛型类型Slice[T]实例化为具体的类型 Slice[string]
+var b Slice[float32] = []float32{1.0, 2.0, 3.0} 
+fmt.Printf("Type Name: %T",b)  //输出：Type Name: Slice[float32]
+
+// ✗ 错误。因为变量a的类型为Slice[int]，b的类型为Slice[float32]，两者类型不同
+a = b  
+
+// ✗ 错误。string不在类型约束 int|float32|float64 中，不能用来实例化泛型类型
+var c Slice[string] = []string{"Hello", "World"} 
+
+// ✗ 错误。Slice[T]是泛型类型，不可直接使用必须实例化为具体的类型
+var x Slice[T] = []int{1, 2, 3} 
+```
+
+对于上面的例子，我们先给泛型类型 `Slice[T]` 传入了类型实参 `int` ，这样泛型类型就被实例化为了具体类型 `Slice[int]` ，被实例化之后的类型定义可近似视为如下：
+
+```go
+type Slice[int] []int     // 定义了一个普通的类型 Slice[int] ，它的底层类型是 []int
+```
+
+我们用实例化后的类型 `Slice[int]` 定义了一个新的变量 `a` ，这个变量可以存储int类型的切片。之后我们还用同样的方法实例化出了另一个类型 `Slice[float32]` ，并创建了变量 `b` 。
+
+因为变量 a 和 b 就是具体的不同类型了(一个 Slice[int] ，一个 Slice[float32]），所以 `a = b` 这样不同类型之间的变量赋值是不允许的。
+
+同时，因为 Slice[T] 的类型约束限定了只能使用 int 或 float32 或 float64 来实例化自己，所以 `Slice[string]` 这样使用 string 类型来实例化是错误的。
+
+map简单示例：
+
+```go
+// MyMap类型定义了两个类型形参 KEY 和 VALUE。分别为两个形参指定了不同的类型约束
+// 这个泛型类型的名字叫： MyMap[KEY, VALUE]
+type MyMap[KEY int | string, VALUE float32 | float64] map[KEY]VALUE  
+
+// 用类型实参 string 和 flaot64 替换了类型形参 KEY 、 VALUE，泛型类型被实例化为具体的类型：MyMap[string, float64]
+var a MyMap[string, float64] = map[string]float64{
+    "jack_score": 9.6,
+    "bob_score":  8.4,
+}
+```
+
+用上面的例子重新复习下各种概念的话：
+
+- KEY和VALUE是**类型形参**
+- `int|string` 是KEY的**类型约束**， `float32|float64` 是VALUE的**类型约束**
+- `KEY int|string, VALUE float32|float64` 整个一串文本因为定义了所有形参所以被称为**类型形参列表**
+- Map[KEY, VALUE] 是**泛型类型**，类型的名字就叫 Map[KEY, VALUE]
+- `var a MyMap[string, float64] = xx` 中的string和float64是**类型实参**，用于分别替换KEY和VALUE，**实例化**出了具体的类型 `MyMap[string, float64]`
+
+![image-20240928213036621](https://imghosting-1257040086.cos.ap-nanjing.myqcloud.com/img/image-20240928213036621.png)
+
+
+
+### 3、泛型f和法
+
+
+
+### 4、自定义泛型约束
+
+
+
+
+
+https://segmentfault.com/a/1190000041634906  Go1.18泛型
 
 ### 2、**模糊测试Fuzzing**
 
@@ -149,6 +324,8 @@ https://tonybai.com/2021/12/01/first-class-fuzzing-in-go-1-18
 
 https://pkg.go.dev/testing@master#hdr-Fuzzing
 
+https://go.googlesource.com/proposal/+/master/design/draft-fuzzing.md
+
 ### 3、**Workspaces**
 
 解决go mod遗留下来的**本地多模块开发依赖问题**
@@ -232,7 +409,7 @@ this is hello%
 
 https://go.dev/doc/go1.18 Go 1.18 的发布说明文档
 
-https://tonybai.com/2022/04/20/some-changes-in-go-1-18/ go1.18变化
+https://tonybai.com/2022/04/20/some-changes-in-go-1-18/ go1.18值得关注的几个变化
 
 https://go.dev/doc/tutorial/workspaces 
 
