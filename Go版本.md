@@ -191,17 +191,222 @@ var a MyMap[string, float64] = map[string]float64{
 
 
 
-### 3、泛型f和法
+### 3、泛型方法和泛型函数
 
+#### 3.1 泛型方法
 
+看了上的例子，你一定会说，介绍了这么多复杂的概念，但好像泛型类型根本没什么用处啊？
+
+是的，单纯的泛型类型实际上对开发来说用处并不大。但是如果将泛型类型和接下来要介绍的泛型receiver相结合的话，泛型就有了非常大的实用性了
+
+我们知道，定义了新的普通类型之后可以给类型添加方法。那么可以给泛型类型添加方法吗？答案自然是可以的，如下：
+
+```go
+package main
+
+// 泛型
+type MySlice[T int | float32] []T
+
+func (s MySlice[T]) Sum() T {
+	var sum T
+	for _, value := range s {
+		sum += value
+	}
+	return sum
+}
+
+// 普通
+type MySlice2 []int // 实例化后的类型名叫 MySlice2[int]
+// 方法中所有类型形参 T 都被替换为类型实参 int
+func (s MySlice2) Sum2() int {
+	var sum int
+	for _, value := range s {
+		sum += value
+	}
+	return sum
+}
+```
+
+这个例子为泛型类型 `MySlice[T]` 添加了一个计算成员总和的方法 `Sum()` 。注意观察这个方法的定义：
+
+- 首先看receiver `(s MySlice[T])` ，所以我们直接把类型名称 `MySlice[T]` 写入了receiver中
+- 然后方法的返回参数我们使用了类型形参 T ****(实际上如果有需要的话，方法的接收参数也可以实用类型形参)
+- 在方法的定义中，我们也可以使用类型形参 T （在这个例子里，我们通过 `var sum T` 定义了一个新的变量 `sum` )
+
+对于这个泛型类型 `MySlice[T]` 我们该如何使用？泛型类型无论如何都需要先用类型实参实例化，所以用法如下：
+
+```go
+var s MySlice[int] = []int{1, 2, 3, 4}
+fmt.Println(s.Sum()) // 输出：10
+
+var s2 MySlice[float32] = []float32{1.0, 2.0, 3.0, 4.0}
+fmt.Println(s2.Sum()) // 输出：10.0
+```
+
+#### 3.2 泛型函数
+
+假设我们想要写一个计算两个数之和的函数：
+
+```go
+func Add(a int, b int) int {
+    return a + b
+}
+```
+
+这个函数理所当然只能计算int的和，而浮点的计算是不支持的。这时候我们可以像下面这样定义一个泛型函数：
+
+```go
+func Add[T int | float32 | float64](a T, b T) T {
+    return a + b
+}
+```
+
+上面就是泛型函数的定义。
+
+> 这种带类型形参的函数被称为**泛型函数**
+
+它和普通函数的点不同在于函数名之后带了类型形参。这里的类型形参的意义、写法和用法因为与泛型类型是一模一样的，就不再赘述了。
+
+和泛型类型一样，泛型函数也是不能直接调用的，要使用泛型函数的话必须传入类型实参之后才能调用。
+
+```go
+Add[int](1,2) // 传入类型实参int，计算结果为 3
+Add[float32](1.0, 2.0) // 传入类型实参float32, 计算结果为 3.0
+
+Add[string]("hello", "world") // 错误。因为泛型函数Add的类型约束中并不包含string
+```
+
+或许你会觉得这样每次都要手动指定类型实参太不方便了。所以Go还支持类型实参的自动推导：
+
+```go
+Add(1, 2)  // 1，2是int类型，编译请自动推导出类型实参T是int
+Add(1.0, 2.0) // 1.0, 2.0 是浮点，编译请自动推导出类型实参T是float32
+```
+
+自动推导的写法就好像免去了传入实参的步骤一样，但请记住这仅仅只是编译器帮我们推导出了类型实参，实际上传入实参步骤还是发生了的。
 
 ### 4、自定义泛型约束
 
+有时候使用泛型编程时，我们会书写长长的类型约束，如下：
 
+```go
+// 一个可以容纳所有int,uint以及浮点类型的泛型切片
+type Slice[T int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64] []T
+```
 
+理所当然，这种写法是我们无法忍受也难以维护的，而Go支持将类型约束单独拿出来定义到接口中，从而让代码更容易维护：
 
+```go
+type IntUintFloat interface {
+    int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64
+}
+type Slice[T IntUintFloat] []T
+```
 
-https://segmentfault.com/a/1190000041634906  Go1.18泛型
+这段代码把类型约束给单独拿出来，写入了接口类型 `IntUintFloat` 当中。需要指定类型约束的时候直接使用接口 `IntUintFloat` 即可。
+
+不过这样的代码依旧不好维护，而接口和接口、接口和普通类型之间也是可以通过 `|` 进行组合：
+
+```go
+type Int interface {
+    int | int8 | int16 | int32 | int64
+}
+
+type Uint interface {
+    uint | uint8 | uint16 | uint32
+}
+
+type Float interface {
+    float32 | float64
+}
+
+type Slice[T Int | Uint | Float] []T  // 使用 '|' 将多个接口类型组合
+```
+
+上面的代码中，我们分别定义了 Int, Uint, Float 三个接口类型，并最终在 Slice[T] 的类型约束中通过使用 `|` 将它们组合到一起。
+
+同时，在接口里也能直接组合其他接口，所以还可以像下面这样：
+
+```go
+type SliceElement interface {
+    Int | Uint | Float | string // 组合了三个接口类型并额外增加了一个 string 类型
+}
+
+type Slice[T SliceElement] []T 
+```
+
+上面定义的 Slie[T] 虽然可以达到目的，但是有一个缺点：
+
+```go
+type MyInt2 int
+
+type MyInt interface {
+	int | int8 | int16 | int32 | int64
+}
+
+func GetMaxNum[T MyInt](a, b T) T {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func main() {
+	fmt.Println(GetMaxNum[int](10, 20))
+	//fmt.Println(GetMaxNum[MyInt2](10, 20))
+}
+```
+
+![image-20240928215640666](../../Library/Application Support/typora-user-images/image-20240928215640666.png)
+
+这里发生错误的原因是，泛型类型 Slice[T] 允许的是 int 作为类型实参，而不是 MyInt2 （虽然 MyInt2 类型底层类型是 int ，但它依旧不是 int 类型）。
+
+为了从根本上解决这个问题，Go新增了一个符号 `~` ，在类型约束中使用类似 `~int` 这种写法的话，就代表着不光是 int ，所有以 int 为底层类型的类型也都可用于实例化。
+
+使用 ~ 对代码进行改写之后如下：
+
+```go
+type Int interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64
+}
+
+type Uint interface {
+    ~uint | ~uint8 | ~uint16 | ~uint32
+}
+type Float interface {
+    ~float32 | ~float64
+}
+
+type Slice[T Int | Uint | Float] []T 
+
+var s Slice[int] // 正确
+
+type MyInt int
+var s2 Slice[MyInt]  // MyInt底层类型是int，所以可以用于实例化
+
+type MyMyInt MyInt
+var s3 Slice[MyMyInt]  // 正确。MyMyInt 虽然基于 MyInt ，但底层类型也是int，所以也能用于实例化
+
+type MyFloat32 float32  // 正确
+var s4 Slice[MyFloat32]
+```
+
+**限制**：使用 `~` 时有一定的限制：
+
+1. ~后面的类型不能为接口
+2. ~后面的类型必须为基本类型
+
+```go
+type MyInt int
+
+type _ interface {
+    ~[]byte  // 正确
+    ~MyInt   // 错误，~后的类型必须为基本类型
+    ~error   // 错误，~后的类型不能为接口
+}
+```
+
+https://segmentfault.com/a/1190000041634906  Go1.18泛型全面讲清楚
 
 ### 2、**模糊测试Fuzzing**
 
