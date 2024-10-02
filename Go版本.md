@@ -4,9 +4,57 @@ Go并不是一成不变的编程语言。最初的Go1.0发布以来，Go语言�
 
 ## go 1.23
 
-https://go.dev/blog/go1.23
+### 1、函数迭代器
 
-https://go.dev/doc/go1.23 Go 1.23 的发布说明文档
+
+
+### 1、标准库
+
+#### 1.1 Timer/Ticker变化
+
+#### 1.2 新增unique包
+
+#### 1.3 函数迭代器相关
+
+前面说过，函数迭代器转正了。标准库中有一些包立即就提供了一些便利的、可以与函数迭代器一起使用的函数，以slices、maps两个后加入Go标准库的泛型容器包为主。
+
+slices包增加了：All、Values、Backward、Collect、AppendSeq、Sortted、SortedFunc、SortedStableFunc和Chunk等
+
+maps包增加了All、Keys、Values、Insert和Collect等
+
+1. **`All`**：`func All(t any) (s()t) iter.iterator(t)`，该函数返回一个迭代器，用于遍历切片的索引和值。这对于需要同时访问切片元素及其索引的操作非常有用。
+2. **`Values`**：`func Values(t any) (s()t) iter.iterator(t)`，此函数返回一个仅遍历切片元素的迭代器，忽略索引。当只关心切片中的元素值时，可以使用这个函数。
+3. **`Backward`**：`func Backward(t any) (s()t) iter.iterator(t)`，该函数返回一个反向遍历切片的迭代器，按照从后向前的顺序访问切片元素，适用于需要反向处理切片数据的场景。
+4. **`Collect`**：`func Collect(t any) (it iter.iterator(t)) ()t`，用于将迭代器中的值收集到一个新的切片中，方便将迭代操作的结果转换为切片形式。
+5. **`AppendSeq`**：`func AppendSeq(t any) (dst()t, it iter.iterator(t)) ()t`，可以将一个迭代器中的值追加到一个已有的切片中，实现切片的扩展。
+6. **`Sorted`**：`func Sorted(t constraints.Ordered) (it iter.iterator(t)) ()t`，该函数从迭代器中收集值到一个新切片，并对其进行排序。它要求切片元素类型必须满足`constraints.Ordered`约束，即元素类型必须支持比较操作。
+7. **`SortedFunc`**：`func SortedFunc(t any) (it iter.iterator(t), less func(a, b t) bool) ()t`，与`Sorted`类似，但允许用户自定义比较函数`less`来对元素进行排序，提供了更灵活的排序方式。
+
+Go 1.23 https://go.dev/blog/go1.23
+
+Go 1.23 的发布说明文档 https://go.dev/doc/go1.23 
+
+Go 1.23版本里程碑 https://github.com/golang/go/milestone/212 
+
+Next Release Notes Deaft https://tip.golang.org/doc/next 
+
+Go Release Dashboard https://dev.golang.org/release
+
+ Go 1.23新特性前瞻 https://mp.weixin.qq.com/s/c7UuQetStkA7Tw2DLfMjvA
+
+Go 1.23 unique库 https://mp.weixin.qq.com/s/NDqeknAm7q77siHm0Jbcxg
+
+unique 背景 https://github.com/golang/go/issues/62483
+
+*https://github.com/go4org/intern*
+
+time.Reset 过期时间问题 https://mp.weixin.qq.com/s/NijdOmdfKGLJowhbe9yqPg
+
+time.After 泄露问题 https://mp.weixin.qq.com/s/Qcpj7TqMeOwCs--59kD3Kw
+
+//go:linkname特性 https://segmentfault.com/a/1190000045164130
+
+slice https://pkg.go.dev/slices@master
 
 ## go 1.22
 
@@ -21,6 +69,8 @@ https://go.dev/doc/go1.21 Go 1.21 的发布说明文档
 https://go.dev/doc/go1.20 Go 1.20 的发布说明文档
 
 ## go 1.19
+
+
 
 https://go.dev/doc/go1.19 Go 1.19 的发布说明文档
 

@@ -36,6 +36,6 @@ func GetMaxNum[T MyInt](a, b T) T {
 }
 
 func main() {
-	//fmt.Println(GetMaxNum[int](10, 20))
-	fmt.Println(GetMaxNum[MyInt2](10, 20))
+	fmt.Println(GetMaxNum[int](10, 20))
+	//fmt.Println(GetMaxNum[MyInt2](10, 20))
 }
