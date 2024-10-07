@@ -4,23 +4,205 @@ Go并不是一成不变的编程语言。最初的Go1.0发布以来，Go语言�
 
 ## go 1.23
 
-### 1、函数迭代器
+*在 `Go 1.22` 版本发布 **6** 个月之后，`Go 1.23` ，2024年8月13日* GO1.23发布，于北京时间 **2024** 年 **8** 月 **14** 日凌晨 **1:03** 正式发布
+
+快速安装：
+
+```go
+$ go install golang.org/dl/go1.23.0@latest
+$ go1.23.0 download  
+Downloaded   0.0% (   16384 / 71607288 bytes) ...
+Downloaded  11.0% ( 7880688 / 71607288 bytes) ...
+Downloaded  41.7% (29835136 / 71607288 bytes) ...
+Downloaded  61.6% (44121808 / 71607288 bytes) ...
+Downloaded  77.7% (55639936 / 71607288 bytes) ...
+Downloaded  95.1% (68107968 / 71607288 bytes) ...
+Downloaded 100.0% (71607288 / 71607288 bytes)
+Unpacking /Users/chenmingyong/sdk/go1.23.0/go1.23.0.darwin-arm64.tar.gz ...
+Success. You may now run 'go1.23.0'
+$ go1.23.0 version
+go version go1.23.0 darwin/arm64
+```
+
+### 一、语言特性更新
+
+- 新的迭代器语法：在 "for-range" 循环中，现在可以使用迭代器函数作为 range 表达式，如 func (func (K) bool)。这[支持用户自定义任意序列的迭代器](https://www.oschina.net/action/GoToLink?url=http%3A%2F%2Fmp.weixin.qq.com%2Fs%3F__biz%3DMzIyNzM0MDk0Mg%3D%3D%26mid%3D2247497326%26idx%3D1%26sn%3D65618d9554bde8f43a19ca4c0be25492%26chksm%3De860118fdf17989908ac10d01debc852c9356c3034a9e2068fcfe9c88999f7f921c4ab4930c4%26scene%3D142%23wechat_redirect)。标准库的 slices 和 maps 包也添加了支持迭代器的新功能。
+- 泛型类型别名预览: Go 1.23 包含了对泛型类型别名的预览支持。
+
+#### 1、函数迭代器
+
+在 `Go 1.23` 中，**迭代器** 实际上是指符合以下三种函数签名之一的函数：
+
+```go
+func(yield func() bool)
+
+func(yield func(V) bool)
+
+func(yield func(K, V) bool)
+```
+
+如果一个函数或方法返回的值符合上述形式之一，那么该返回值就可以被称为 **迭代器**。
+
+代码示例：
+
+```go
+/*Backward[E any] Backward 是一个泛型函数，反向遍历切片
+ * @Description: 接受一个切片（s），切片的元素类型为泛型类型E（可以是任何类型）s
+ * @param s 
+ * @return func(yield func(int, E) bool)
+ */
+func Backward[E any](s []E) func(yield func(int, E) bool) {
+	return func(yield func(int, E) bool) { 
+		for i := len(s) - 1; i >= 0; i-- {
+			if !yield(i, s[i]) {
+				return
+			}
+		}
+	}
+}
+```
+
+#### Range Over Function Types （对函数类型遍历）
+
+在 `Go 1.23` 版本中，`for-range` 循环中的范围表达式得到了改进。此前，范围表达式仅支持 `array`（数组）、`slice`（切片） 和 `map`（映射） 等类型，而从 `Go 1.23` 开始，新增了对函数类型的支持。不过，函数类型必须是前面所提到的三种类型之一，也就是函数需要实现迭代器。
+
+```go
+/*Backward[E any] Backward 是一个泛型函数，反向遍历切片
+ * @Description: 接受一个切片（s），切片的元素类型为泛型类型E（可以是任何类型）s
+ * @param s 
+ * @return func(yield func(int, E) bool)
+ */
+func Backward[E any](s []E) func(yield func(int, E) bool) {
+	return func(yield func(int, E) bool) { 
+		for i := len(s) - 1; i >= 0; i-- {
+			if !yield(i, s[i]) {
+				return
+			}
+		}
+	}
+}
+func main() {
+  s := string{"a", "b"}
+  for i, v := range Backward(s) {
+		fmt.Println(i, v)
+
+	}
+}
+
+```
+
+①返回函数接收yield函数作为参数，接收一个int类型和一个E类型
+
+②它使用一个for循环从切片的最后一个元素开始向前遍历切片。对于每个元素，它调用yield函数，并将当前元素的索引和元素本身作为参数传递给yield函数
+
+③如果`yield`函数返回`false`，则内部函数会立即返回，停止遍历切片。如果循环正常结束（即`yield`函数始终返回`true`），则内部函数执行完毕。
+
+#### iter包
+
+为了简化迭代器的使用，`Go 1.23` 版本新增了一个 `iter` 包，该包定义了两种迭代器类型，分别是 `Seq` 和 `Seq2`，用于处理不同的迭代场景。
+
+```go
+package iter
+
+type Seq[V any] func(yield func(V) bool)
+
+type Seq2[K, V any] func(yield func(K, V) bool)
+```
+
+**`Seq` 和 `Seq2` 的区别：**
+
+- **`Seq[V any]`**
+  `Seq` 是一个泛型类型的函数，接收一个 `yield` 函数作为参数。它推出单个元素，例如切片的索引或映射中的键。`yield` 函数返回 `bool`，决定是否继续迭代。
+
+  使用场景：可以用于返回一个单值的迭代，比如切片中的索引或值，或映射中的键或值。
+
+- **`Seq2[K, V any]`**
+  `Seq2` 是一个泛型类型的函数，接收一个 `yield` 函数，推送一对元素，例如切片中的索引和值，或者映射中的键值对。`yield` 函数同样返回 `bool`，以决定是否继续迭代。
+
+  使用场景：当需要同时返回两个值（如键和值）时使用
+
+Seq代码示例：
+
+```go
+// Lines 对文件里的文本行进行遍历
+func Lines(path string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		f, err := os.Open(path)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			if !yield(scanner.Text()) {
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			panic(err)
+		}
+	}
+}
+for line := range Lines("a.txt") {
+		fmt.Println(line)
+}
+```
+
+Seq2代码示例：
+
+```go
+// Entries 对json对象的属性进行遍历
+func Entries(object string) iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		dec := json.NewDecoder(strings.NewReader(object))
+		var kvs map[string]string
+		if err := dec.Decode(&kvs); err != nil {
+			panic(err)
+		}
+		for k, v := range kvs {
+			if !yield(k, v) {
+				return
+			}
+		}
+	}
+}
+
+// 可以通过 for-range 循环直接接收被推送的值
+for k, v := range Entries(`{"name":"go", "version":"1.23.0"}`) {
+		fmt.Printf("%v=%v\n", k, v)
+}
+
+// 也可以借助于Pull() 和next() 遍历seq
+next, stop := iter.Pull(s1)
+defer stop()
+for {
+  key, valid := next()
+  if valid {
+    fmt.Println(key)
+  } else {
+    break
+  }
+}
+```
 
 
 
-### 1、标准库
-
-#### 1.1 Timer/Ticker变化
-
-#### 1.2 新增unique包
-
-#### 1.3 函数迭代器相关
+### 2、标准库的 slices 和 maps 包也添加了支持迭代器的新功能
 
 前面说过，函数迭代器转正了。标准库中有一些包立即就提供了一些便利的、可以与函数迭代器一起使用的函数，以slices、maps两个后加入Go标准库的泛型容器包为主。
 
-slices包增加了：All、Values、Backward、Collect、AppendSeq、Sortted、SortedFunc、SortedStableFunc和Chunk等
+`slices` 包新增的函数：
 
-maps包增加了All、Keys、Values、Insert和Collect等
+- `All([]E) iter.Seq2[int, E]`
+- `Values([]E) iter.Seq[E]`
+- `Collect(iter.Seq[E]) []E`
+- `AppendSeq([]E, iter.Seq[E]) []E`
+- `Backward([]E) iter.Seq2[int, E]`
+- `Sorted(iter.Seq[E]) []E`
+- `SortedFunc(iter.Seq[E], func(E, E) int) []E`
+- `SortedStableFunc(iter.Seq[E], func(E, E) int) []E`
+- `Repeat([]E, int) []E`
+- `Chunk([]E, int) iter.Seq([]E)`s
 
 1. **`All`**：`func All(t any) (s()t) iter.iterator(t)`，该函数返回一个迭代器，用于遍历切片的索引和值。这对于需要同时访问切片元素及其索引的操作非常有用。
 2. **`Values`**：`func Values(t any) (s()t) iter.iterator(t)`，此函数返回一个仅遍历切片元素的迭代器，忽略索引。当只关心切片中的元素值时，可以使用这个函数。
@@ -29,6 +211,38 @@ maps包增加了All、Keys、Values、Insert和Collect等
 5. **`AppendSeq`**：`func AppendSeq(t any) (dst()t, it iter.iterator(t)) ()t`，可以将一个迭代器中的值追加到一个已有的切片中，实现切片的扩展。
 6. **`Sorted`**：`func Sorted(t constraints.Ordered) (it iter.iterator(t)) ()t`，该函数从迭代器中收集值到一个新切片，并对其进行排序。它要求切片元素类型必须满足`constraints.Ordered`约束，即元素类型必须支持比较操作。
 7. **`SortedFunc`**：`func SortedFunc(t any) (it iter.iterator(t), less func(a, b t) bool) ()t`，与`Sorted`类似，但允许用户自定义比较函数`less`来对元素进行排序，提供了更灵活的排序方式。
+
+`maps` 包新增的函数：
+
+- `All(map[K]V) iter.Seq2[K, V]`
+- `Keys(map[K]V) iter.Seq[K]`
+- `Values(map[K]V) iter.Seq[V]`
+- `Collect(iter.Seq2[K, V]) map[K, V]`
+- `Insert(map[K, V], iter.Seq2[K, V])`
+
+### 二、工具链改进
+
+- `Go telemetry` 遥测系统：允许 `Go` 的工具链（编译器、调试器等工具）收集使用和故障统计数据。这些数据的收集是为了帮助开发团队了解 `Go` 工具链的使用情况和运行状态，从而对工具链进行改进和优化。
+- `Go` 命令：新增了一些便利的功能。例如运行 `go env -changed` 可以更容易地查看哪些设置的有效值与默认值不同，而 `go mod tidy -diff` 可以在不修改 `go.mod` 和 `go.sum` 文件的情况下，帮助你查看需要进行的更改。
+- `Go vet 子命令`：现在能够检测代码中使用的某些特性或函数是否对于目标 `Go` 版本来说太新了。
+
+### 三、标准库更新
+
+- 优化了 `time.Timer` 与 `time.Ticker` 两个定时器的实现。
+
+- 标准库中新增了总共三个包：`iter`、`structs` 和 `unique`。
+
+   `iter`：提供了与序列上的迭代器相关的基本定义和操作。
+
+  `structs`：定义了标记类型，用于修改结构体的属性。
+
+  `unique`：提供了规范化（“interning”）可比较值的工具。
+
+  https://before80.github.io/go_docs/goBlog/2024/NewUniquePackage/
+
+- GODEBUG 设置：支持在 go.mod 和 go.work 文件中使用新的 godebug 指令
+
+### 四、参考
 
 Go 1.23 https://go.dev/blog/go1.23
 
@@ -56,23 +270,713 @@ time.After 泄露问题 https://mp.weixin.qq.com/s/Qcpj7TqMeOwCs--59kD3Kw
 
 slice https://pkg.go.dev/slices@master
 
+go1.23迭代器 https://chenmingyong.cn/posts/go1.23-iterator
+
 ## go 1.22
+
+2024年 2月6日，Go 官方发布了最新的 Go1.22 版本
+
+快速安装：
+
+```go
+go install golang.org/dl/go1.23.0@latest
+```
+
+最新的Go版本1.22比Go 1.21晚了6个月。 它的大部分变化都在工具链、运行时和库的实现中。 与往常一样，该版本保持了Go 1对兼容性
+
+#### 一、语言特性更新
+
+Go 1.22对“for”循环做了两个更改。
+
+##### 1、for循环声明的变量只创建一次，并在每次迭代中更新。在Go 1.22中，循环的每次迭代都会创建新变量，以避免意外的共享错误
+
+先来看一段代码：
+
+```go
+package main
+
+import (
+ "fmt"
+)
+
+func main() {
+    done := make(chan bool)
+
+    // 遍历 slice 中的所有元素，分别开协程对其进行一段逻辑操作
+    // 这里，用打印元素来代表一段逻辑
+    values := []string{"a", "b", "c"}
+    for i, v := range values {
+        go func() {
+            fmt.Printf("&p\n", &v) // 在Go122之前
+            fmt.Println(i, v)
+            done <- true
+        }()
+    }
+
+    // 等所有协程执行完
+    for _ = range values {
+        <-done
+    }
+}
+```
+
+![image-20241004100822628](https://imghosting-1257040086.cos.ap-nanjing.myqcloud.com/img/image-20241004100822628.png)
+
+![image-20241004101152693](https://imghosting-1257040086.cos.ap-nanjing.myqcloud.com/img/image-20241004101152693.png)
+
+数据竞争问题：
+
+我们可以将上面的 for range 语句做一个等价转换，这样可以帮助你理解 for range 的工作原理。等价转换后的结果是这样的：
+
+```go
+func main() {
+    done := make(chan bool)
+  
+    values := []string{"a", "b", "c"}
+  
+    {
+      i, v := 0, 0
+      for i, v := range values {
+        go func() {
+          fmt.Printf("&p\n", &v)
+          fmt.Println(i, v)
+          done <- true
+        }()
+      }
+    }
+
+
+    // 等所有协程执行完
+    for _ = range values {
+        <-done
+    }
+}
+```
+
+通过等价转换后的代码，我们可以清晰地看到循环变量 i 和 v 在每次迭代时的重用。而 Goroutine 执行的闭包函数引用了它的外层包裹函数中的变量 i、v，这样，变量 i、v 在主 Goroutine 和新启动的 Goroutine 之间实现了共享，而 i, v 值在整个循环过程中是重用的，仅有一份。
+
+##### 2.range 关键字支持整型数据
+
+在Go 1.22版本中，for range后面的range表达式除了支持传统的像数组、切片、map、channel等表达式外，**还支持放置整型表达式**
+
+示例代码：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	for i := range 10 {
+		fmt.Println(i)
+	}
+}
+// Notice 下面的代码只能在go1.22版本运行，以下的版本会报错
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+```
+
+如果n <= 0，则循环不运行任何迭代。
+
+这个新语法特性，可以理解为是一种“语法糖”，是下面等价代码的“语法糖”：
+
+```go
+for i:=0;i<5;i++ {
+  
+}
+```
+
+迭代总是从0开始，似乎限制了该语法糖的使用范围
+
+##### 3.函数迭代器的
+
+Go增加了函数迭代器（iterator），函数迭代器以试验特性提供，通过GOEXPERIMENT=rangefunc可以体验该功能特性
+
+示例代码：
+
+```go
+func Backward(s []E) func(func(int, E) bool) {
+    return func(yield func(int, E) bool) {
+        for i := len(s)-1; i >= 0; i-- {
+            if !yield(i, s[i]) {
+                return
+            }
+        }
+        return
+    }
+}
+```
+
+### 二、编译器、工具链
+
+1、Go 1.22版本在编译上优化PGO(profile-guided optimization)
+
+2、在工具链方面：
+
+> go work支持vendor
+
+在Go 1.22版本中，通过go work vendor可以将workspace中的依赖放到vendor⽬录下，同时在构建时，如果workspace下有vendor⽬录，那么默认的构建是go build -mod=vendor，即基于vendor的构建。
+
+> 改进go test -cover的输出
+
+对于没有自己的测试文件的包，go test -cover在go 1.22版本之前会输出：
+
+```
+? mymod/mypack [no test files]
+```
+
+但在Go 1.22版本之后，会报告覆盖率为0.0%：
+
+```
+mymod/mypack coverage: 0.0% of statements
+```
+
+### 三、标准库
+
+#### 1.math/rand/v2：标准库的第一个v2版本包
+
+Go 1.22中新增了math/rand/v2包，这里之所以将它列为Go 1.22版本标准库的⼀次重要变化，是因为这是标准库第一次为某个包建⽴v2版本，按照Russ Cox的说法，这次math/rand/v2包的创建，算是为标准库中的其他可能的v2包“探探路”，找找落地路径。关于math/rand/v2包相对于原math/rand包的变化有很多，具体可以参考[issue 61716](https://go.dev/issue/61716)中的设计与讨论。
+
+#### 2.slice
+
+##### Concat：高效拼接切片
+
+Concat函数接受一个不定参数slices，参数类型为切片，该函数用于将多个切片拼接到一个新的切片里并返回新切片。
+
+在以前的 Go 版本中，有一个很常见的使用场景，如果我们想要拼接两个切片。必须要手写类似如下的代码：
+
+```go
+func main() {
+ s1 := []string{"a", "b", "c"}
+ s2 := []string{"1", "2", "3"}
+
+ s3 := append(s1, s2...)
+ fmt.Println(s3)
+}
+```
+
+Concat 函数签名如下：
+
+```go
+func Concat[S ~[]E, E any](slices ...S) S
+```
+
+使用Concat函数，示例：
+
+```go
+import (
+ "fmt"
+ "slices"
+)
+
+func main() {
+ s1 := []string{"hello"}
+ s2 := []string{"a", "b"}
+ s3 := []string{"1", "2"}
+ resp := slices.Concat(s1, s2, s3)
+ fmt.Println(resp)
+ fmt.Printf("cap: %d, len: %d\n", cap(resp), len(resp))
+}
+```
+
+其内部函数实现也比较简单。如下代码：
+
+```go
+// Concat returns a new slice concatenating the passed in slices.
+func Concat[S ~[]E, E any](slices ...S) S {
+ size := 0
+ for _, s := range slices {
+  size += len(s)
+  if size < 0 {
+   panic("len out of range")
+  }
+ }
+ newslice := Grow[S](nil, size)
+ for _, s := range slices {
+  newslice = append(newslice, s...)
+ }
+ return newslice
+}
+```
+
+`Concat` 函数的源码实现非常简洁，它在拼接切片之前先计算了新切片所需的长度，然后利用 `Grow` 函数初始化新切片。这样做的好处是避免了后续 `append` 操作中因为切片扩容而导致的内存重新分配和复制问题，使得函数更加高效。
+
+##### Delete`、`DeleteFunc`、`Compact`、`CompactFunc` 和 `Replace 函数，零化处理
+
+在 Go 1.22 版本中，对 Delete、DeleteFunc、Compact、CompactFunc 和 Replace 函数进行了更新。这些函数的共同点是接受一个给定的切片参数，记为 s1，并返回一个新切片，记为 s2。被移除的元素会在 s1 中被置为零值（被移除的元素 是指从 s1 中移除的指定元素，在s2 中不存在）。
+
+**Delete 函数**
+通过不同 Go 版本的代码示例来感受 Delete 函数 零化处理 的更新。
+Go1.21版本的代码示例：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 2, 3, 4, 5}
+        s2 := slices.Delete(s1, 3, 5)
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 2 3 4 5]
+[1 2 3]
+```
+
+Go 1.22版本代码示例：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 2, 3, 4, 5}
+        s2 := slices.Delete(s1, 3, 5)
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 2 3 0 0]
+[1 2 3]
+```
+
+通过对比不同版本的代码运行结果可知，**被移除的元素** 在原切片里被置为了 **零值**。
+
+DeleteFunc 函数
+
+通过不同 `Go` 版本的代码示例来感受 `DeleteFunc` 函数 **零化处理** 的更新。
+
+在Go 1.21版本的代码示例：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 2, 3, 4, 5}
+        s2 := slices.DeleteFunc(s1, func(e int) bool {
+                return e%2 == 0
+        })
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 3 5 4 5]
+[1 3 5]
+```
+
+①在传入的函数`func(e int) bool`中，逻辑为`return e%2 == 0`，即当元素为偶数时，该函数返回`true`。`slices.DeleteFunc`函数会遍历原始切片`s1`，对于每个元素，都会调用这个条件函数。如果条件函数返回`true`，则该元素会被删除。
+
+在Go1.22版本代码示例：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 2, 3, 4, 5}
+        s2 := slices.DeleteFunc(s1, func(e int) bool {
+                return e%2 == 0
+        })
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 3 5 0 0]
+[1 3 5]
+```
+
+通过对比不同版本的代码运行结果可知，**被移除的元素** 在原切片里被置为了 **零值**。
+
+Compact函数
+
+通过不同 `Go` 版本的代码示例来感受 `Compact` 函数 **零化处理** 的更新。
+
+在Go1.21版本示例代码：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 2, 2, 3, 3, 4, 5}
+        s2 := slices.Compact(s1)
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 2 3 4 5 4 5]
+[1 2 3 4 5]
+```
+
+在Go1.22版本示例代码：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 2, 2, 3, 3, 4, 5}
+        s2 := slices.Compact(s1)
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 2 3 4 5 0 0]
+[1 2 3 4 5]
+```
+
+通过对比不同版本的代码运行结果可知，**被移除的元素** 在原切片里被置为了 **零值**。
+
+CompactFunc 函数
+
+通过不同 `Go` 版本的代码示例来感受 `CompactFunc` 函数 **零化处理** 的更新。
+
+在Go1.21版本示例代码：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+        "strings"
+)
+
+func main() {
+        s1 := []string{"hello world", "Hello world", "hello World"}
+        s2 := slices.CompactFunc(s1, func(a, b string) bool {
+                return strings.ToLower(a) == strings.ToLower(b)
+        })
+        fmt.Printf("%#v\n", s1)
+        fmt.Printf("%#v\n", s2)
+}
+// 代码运行结果
+[]string{"hello world", "Hello world", "hello World"}
+[]string{"hello world"}
+```
+
+在Go 1.22版本示例代码：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+        "strings"
+)
+
+func main() {
+        s1 := []string{"hello world", "Hello world", "hello World"}
+        s2 := slices.CompactFunc(s1, func(a, b string) bool {
+                return strings.ToLower(a) == strings.ToLower(b)
+        })
+        fmt.Printf("%#v\n", s1)
+        fmt.Printf("%#v\n", s2)
+}
+// 代码运行结果
+[]string{"hello world", "", ""}
+[]string{"hello world"}
+```
+
+通过对比不同版本的代码运行结果可知，**被移除的元素** 在原切片里被置为了 **零值**。
+
+Replace 函数
+
+通过不同 `Go` 版本的代码示例来感受 `Replace` 函数 **零化处理** 的更新。
+
+在Go1.21版本示例代码：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 6, 7, 4, 5}
+        s2 := slices.Replace(s1, 1, 3, 2)
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 2 4 5 5]
+[1 2 4 5]
+```
+
+在Go1.22 版本代码中示例：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []int{1, 6, 7, 4, 5}
+        s2 := slices.Replace(s1, 1, 3, 2)
+        fmt.Println(s1)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[1 2 4 5 0]
+[1 2 4 5]
+```
+
+##### 越界插入优化
+
+`Go 1.22` 版本对 `slices` 库的 `Insert` 函数进行了优化。在使用 `Insert` 函数时，若参数 `i` 超出切片的范围，总会触发 `panic`。而在 `Go 1.22` 版本之前，即使 `i` 越界了，在没有指定插入元素的情况下，该行为不会触发 `panic`。
+
+在Go1.21版本代码示例：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []string{"hello", "world"}
+        s2 := slices.Insert(s1, 3)
+        fmt.Println(s2)
+}
+// 代码运行结果
+[hello world]
+```
+
+在Go1.22版本代码示例：
+
+```go
+package main
+
+import (
+        "fmt"
+        "slices"
+)
+
+func main() {
+        s1 := []string{"hello", "world"}
+        s2 := slices.Insert(s1, 3)
+        fmt.Println(s2)
+}
+// 代码运行结果
+panic: runtime error: slice bounds out of range [3:2]
+
+goroutine 1 [running]:
+slices.Insert[...]({0x14000092020?, 0x1400004c738?, 0x0?}, 0x60?, {0x0?, 0x1400009ef38?, 0x1003c4ad0?})
+        /Users/zmj/go/go1.22/src/slices/slices.go:133 +0x434
+main.main()
+        /Users/zmj/workspace/experiments/go122/slices-example/main.go:38 +0x70
+```
+
+#### 3.增强http.ServeMux表达能力
+
+```go
+func Hello() {
+	mux := http.NewServeMux()
+	//mux.HandleFunc("/hello/{name}", func(w http.ResponseWriter, r *http.Request) {
+	//	if r.Method != "GET" {
+	//		fmt.Fprintf(w, "warn: 只支持GET方法")
+	//	} else {
+	//		fmt.Fprintf(w, "你好 "+r.PathValue("name"))
+	//	}
+	//})
+	mux.HandleFunc("GET /hello/{name}", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "你好 "+r.PathValue("name"))
+	})
+}
+```
+
+关于新版http.ServeMux的具体使用方法，其作者Jonathan Amsterdam（也是[log/slog](https://tonybai.com/2022/10/30/first-exploration-of-slog)的作者）在官博发表了一篇名为“[Routing Enhancements for Go 1.22](https://go.dev/blog/routing-enhancements)”的文章，大家可以详细参考。
+
+### 四、参考
 
 https://go.dev/doc/go1.22 Go 1.22 的发布说明文档
 
+https://juejin.cn/post/7351336619594743848 go1.22版本
+
+https://tonybai.com/2023/12/25/go-1-22-foresight/ go 1.22 前瞻性
+
+https://colobu.com/2023/12/24/new-math-rand-in-Go/ Go标准库新的math/rand
+
+https://mp.weixin.qq.com/s?__biz=MzUxMDI4MDc1NA==&mid=2247500406&idx=1&sn=d91ed868609a8a6217867bd2ba15cc36&scene=21#wechat_redirect Go1.22 新特性 math/rand/v2库
+
+https://mp.weixin.qq.com/s?__biz=MzUxMDI4MDc1NA==&mid=2247500437&idx=1&sn=9d21f73b106e0a6a9c466f6db98c7163&scene=21#wechat_redirect Go 1.22 Slices 变更Concat、Delete、Insert函数
+
+https://blog.csdn.net/weixin_44604586/article/details/136227324 Go 1.22slices库
+
+https://tonybai.com/2024/02/18/some-changes-in-go-1-22/ Go1.22值得关注的变化 
+
 ## go 1.21
+
+2023年 8月8日，Go 官方发布了最新的 Go1.22 版本
+
+最新的Go版本1.21比Go 1.20晚了6个月。 它的大部分变化都在工具链、运行时和库的实现中。 与往常一样，该版本保持了Go 1对兼容性的承诺; 事实上，Go 1.21改进了这个承诺。 我们期望几乎所有的Go程序都能像以前一样编译和运行。
+
+### 1、语言特性更新
+
+#### min、max、clear
+
+在Go 1.21版本中，builtin增加了三个预定义函数：min、max和clear。
+
+顾名思义，min和max函数分别返回参数列表中的最小值和最大值，它们都是泛型函数，原型如下：
+
+```
+func min[T cmp.Ordered](x T, y ...T) T
+func max[T cmp.Ordered](x T, y ...T) T
+```
+
+示例：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var x, y = 5, 6
+	i := min(x, y)
+	fmt.Println(i)
+	fmt.Println(max("abc", "hello", "golang")) // hello
+	//var f float64 = 5.6
+	//fmt.Printf("%T\n", max(x, y, f))    // invalid argument: mismatched types int (previous argument) and float64 (type of f)
+	//fmt.Printf("%T\n", max(x, y, 10.1)) // (untyped float constant) truncated to int
+}
+```
+
+我们看到：Go 1.21编译器报错，即便是untyped constant，如果类型不同，也会提醒你可能存在值精度的truncated。
+
+max和min支持哪些类型呢？通过min和max原型中的类型参数(type parameter)可以看到，其约束类型(constraint)为cmp.Ordered，我们看一下该约束类型的定义：
+
+```
+type Ordered interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64 |
+        ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+        ~float32 | ~float64 |
+        ~string
+}
+```
+
+符合Ordered约束的上述这些类型以及衍生类型都可以使用min、max获取最小值和最大值。
+
+新增一个clear函数:
+
+```go
+func clear[T ~[]Type | ~map[Type]Type1](t T)
+```
+
+示例：
+
+```go
+	var sl = []int{1, 2, 3, 4, 5, 6}
+	fmt.Printf("before clear, sl=%v, len(sl)=%d, cap(sl)=%d\n", sl, len(sl), cap(sl))
+	clear(sl)
+	fmt.Printf("after clear, sl=%v, len(sl)=%d, cap(sl)=%d\n", sl, len(sl), cap(sl))
+
+	var m = map[string]int{
+		"li":   13,
+		"zhao": 14,
+		"wang": 15,
+	}
+	fmt.Printf("before clear, m=%v, len(m)=%d\n", m, len(m))
+	clear(m)
+	fmt.Printf("after clear, m=%v, len(m)=%d\n", m, len(m))
+// 结果
+before clear, sl=[1 2 3 4 5 6], len(sl)=6, cap(sl)=6
+after clear, sl=[0 0 0 0 0 0], len(sl)=6, cap(sl)=6
+before clear, m=map[li:13 wang:15 zhao:14], len(m)=3
+after clear, m=map[], len(m)=0
+
+```
+
+- 针对slice，clear保持slice的长度和容量，但将所有slice内已存在的元素(len个)都置为元素类型的零值；
+- 针对map，clear则是清空所有map的键值对，clear后，我们将得到一个empty map。
+
+> 注：clear函数在清空map中的键值对时，并未释放掉这些键值所占用的内存。
+
+
 
 https://go.dev/doc/go1.21 Go 1.21 的发布说明文档
 
+https://tonybai.com/2023/08/20/some-changes-in-go-1-21/ Go1.21 值得关注的变化
+
 ## go 1.20
+
+
 
 https://go.dev/doc/go1.20 Go 1.20 的发布说明文档
 
 ## go 1.19
 
+Go官方团队在2022.06.11发布了Go 1.19 Beta 1版本，Go 1.19的正式release版本预计会在今年8月份发布。
+
+### 一、语言特性更新
+
+### 二、可移植
+
+正式在linux上支持龙芯架构(GOOS=linux, GOARCH=loong64)
+
+这一点不得不提，因为这一变化都是国内龙芯团队贡献的。不过目前龙芯支持的linux kernel版本最低也是5.19，意味着龙芯在老版本linux上还无法使用Go。
+
+三、新的编译约束 `unix`
+
+Go语言支持使用编译约束(build constraint)进行条件编译。Go 1.19版本新增了编译约束 `unix` ，可以在`//go:build`后面使用`unix`。
+
+```go
+//go:build unix
+```
+
+`unix`表示编译的目标操作系统是Unix或者类Unix系统。对于Go 1.19版本而言，如果`GOOS`是 `aix`, `android`, `darwin`, `dragonfly`, `freebsd`, `hurd`, `illumos`, `ios`, `linux`, `netbsd`, `openbsd`, 或 `solaris`中的某一个，那就满足`unix`这个编译约束。
+
+未来`unix`约束还会匹配一些新的类Unix操作系统。
+
 
 
 https://go.dev/doc/go1.19 Go 1.19 的发布说明文档
+
+https://tonybai.com/2022/08/22/some-changes-in-go-1-19/ Go1.19值得关注的变化
+
+https://segmentfault.com/a/1190000042005487 Go1.19 变化
 
 ## go 1.18
 
@@ -1251,7 +2155,3 @@ https://www.bilibili.com/video/BV1iS4y1z7V5/?spm_id_from=333.337.search-card.all
 https://cloud.tencent.com/developer/article/2126557 深入分析go1.17函数调用栈参数传递
 
 https://blog.csdn.net/weixin_52690231/article/details/125305807 调用约定修改
-
-## go 1.16
-
-https://go.dev/doc/go1.16  Go 1.16 的发布说明文档
